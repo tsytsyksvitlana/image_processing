@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Розпізнавання дефектів фігур</title>
+  <link rel="stylesheet" href="style.css">
+  <!-- Brain.js буде використано в Лаб. 2 для навчання мережі -->
+  <!-- <script src="https://cdn.jsdelivr.net/npm/brain.js"></script> -->
+</head>
+<body>
+  <header class="topbar">
+    <h1>Розпізнавання дефектів на зображеннях фігур</h1>
+  </header>
+
+  <main class="layout">
+
+    <!-- БЛОК 1: керування (дані, навчання, розпізнавання) -->
+    <section class="panel" aria-labelledby="h-ctl">
+      <h2 id="h-ctl">1. Керування</h2>
+
+      <div class="ctl-grid">
+
+        <!-- ліва частина: навчальні дані -->
+        <div class="sub">
+          <h3 class="group">Еталон</h3>
+          <div class="ref-row">
+            <label id="ref-drop" class="ref-box" data-num="1" tabindex="0" role="button" aria-label="Еталон: не задано. Натисніть, щоб завантажити файл" aria-describedby="err-ref">
+              <input id="ref-input" type="file" accept="image/png,image/jpeg,image/bmp" hidden>
+              <img id="ref-img" alt="" hidden>
+              <span id="ref-ph"><svg class="ico" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false"><path d="M12 16V4m0 0L7 9m5-5 5 5M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Обрати файл</span></span>
+            </label>
+            <div class="ref-side">
+              <p id="ref-info" class="ref-info">Фігура без дефекту для порівняння. Завантажте файл або згенеруйте.</p>
+              <button id="btn-gen-ref" class="btn" data-num="2">Згенерувати еталон</button>
+            </div>
+          </div>
+          <div id="err-ref" class="field-err" aria-live="polite"></div>
+
+          <h3 class="group">Навчальні дані</h3>
+
+          <label id="dropzone" class="dropzone" data-num="3" tabindex="0" role="button" aria-describedby="drop-cls err-train-drop">
+            <input id="file-input" type="file" accept="image/png,image/jpeg,image/bmp" multiple hidden>
+            <svg class="ico" viewBox="0 0 24 24" width="30" height="30" aria-hidden="true" focusable="false"><path d="M12 16V4m0 0L7 9m5-5 5 5M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <strong>Перетягніть зображення сюди</strong>
+            <span class="fake-btn">Обрати файли</span>
+            <span class="drop-fmt">PNG, JPG, BMP · до 5 МБ</span>
+            <span id="drop-cls" class="drop-cls"></span>
+          </label>
+          <div id="err-train-drop" class="field-err" aria-live="polite"></div>
+
+          <fieldset class="field" data-num="4">
+            <legend>Клас завантажуваних зображень</legend>
+            <div class="segmented">
+              <label><input type="radio" name="cls" value="ok" checked><span>Без дефекту</span></label>
+              <label><input type="radio" name="cls" value="defect"><span>З дефектом</span></label>
+            </div>
+          </fieldset>
+
+          <details class="generator" open>
+            <summary>Генерація навчальних прикладів</summary>
+            <div class="grid2">
+              <div class="field" data-num="5">
+                <label for="shape">Фігура</label>
+                <select id="shape">
+                  <option value="circle">Круг</option>
+                  <option value="square">Квадрат</option>
+                </select>
+              </div>
+              <div class="field" data-num="6">
+                <label for="count">Кількість кожного класу</label>
+                <input id="count" type="number" min="1" max="50" value="10" aria-describedby="count-err">
+                <small id="count-err" class="field-err" aria-live="polite"></small>
+              </div>
+            </div>
+            <button id="btn-generate" class="btn" data-num="7">Згенерувати</button>
+          </details>
+
+          <div class="list-head">
+            <h3>Навчальний набір <span id="counter" class="badge">0</span></h3>
+            <button id="btn-clear" class="btn link" data-num="9" disabled>Очистити</button>
+          </div>
+          <ul id="dataset" class="dataset" data-num="8" role="listbox" aria-label="Навчальний набір"></ul>
+        </div>
+
+        <!-- права частина: навчання та розпізнавання -->
+        <div class="sub">
+          <h3 class="group">Навчання мережі</h3>
+          <div class="grid2">
+            <div class="field" data-num="10">
+              <label for="bins">Інтервалів гістограми</label>
+              <input id="bins" type="number" min="4" max="256" value="256" aria-describedby="params-err">
+            </div>
+            <div class="field" data-num="11">
+              <label for="hidden">Прихованих нейронів (0 — без шару)</label>
+              <input id="hidden" type="number" min="0" max="64" value="0" aria-describedby="params-err">
+            </div>
+            <div class="field" data-num="12">
+              <label for="epochs">Епох навчання</label>
+              <input id="epochs" type="number" min="1" max="10000" value="200" aria-describedby="params-err">
+            </div>
+            <div class="field" data-num="13">
+              <label for="lr">Швидкість навчання</label>
+              <input id="lr" type="number" min="0.001" max="1" step="0.001" value="0.01" aria-describedby="params-err">
+            </div>
+          </div>
+          <div id="params-err" class="field-err" aria-live="polite"></div>
+
+          <button id="btn-train" class="btn block" data-num="14" disabled aria-describedby="hint-train">Навчити мережу</button>
+          <p id="hint-train" class="hint" hidden></p>
+
+          <div class="progress-wrap" data-num="15">
+            <div id="progress-label" class="progress-label">Очікування</div>
+            <progress id="progress" max="100" value="0" aria-labelledby="progress-label"></progress>
+          </div>
+
+          <h3 class="group">Розпізнавання <span id="test-counter" class="badge">0</span></h3>
+          <label id="test-drop" class="dropzone compact" data-num="16" tabindex="0" role="button" aria-describedby="err-test-drop">
+            <input id="test-input" type="file" accept="image/png,image/jpeg,image/bmp" multiple hidden>
+            <svg class="ico" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false"><path d="M12 16V4m0 0L7 9m5-5 5 5M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <span class="dz-text"><strong>Файли для розпізнавання</strong>
+            <span>перетягніть або <u>оберіть</u> · без мітки</span></span>
+          </label>
+          <div id="err-test-drop" class="field-err" aria-live="polite"></div>
+          <button id="btn-gen-test" class="btn block" data-num="17">Згенерувати випадкове</button>
+          <ul id="tests" class="strip-list" data-num="18" role="listbox" aria-label="Зображення для розпізнавання"></ul>
+          <button id="btn-classify" class="btn block" data-num="19" disabled aria-describedby="hint-classify">Розпізнати</button>
+          <p id="hint-classify" class="hint" hidden></p>
+
+          <div id="result" class="result" data-num="20" aria-live="polite">
+            <div class="result-title">Результат</div>
+            <div id="result-body" class="result-body">Результату ще немає</div>
+          </div>
+
+          <div class="log-head"><h3>Журнал</h3></div>
+          <ol id="log" class="log" data-num="21" role="log" aria-live="polite"></ol>
+        </div>
+      </div>
+    </section>
+
+    <!-- БЛОК 2: візуалізація -->
+    <section class="panel center" aria-labelledby="h-view">
+      <h2 id="h-view">2. Зображення та ознаки</h2>
+
+      <div class="view-row">
+        <figure class="view" data-num="22">
+          <div class="frame">
+            <canvas id="preview" width="512" height="512" role="img" aria-label="Зображення не вибрано"></canvas>
+            <div id="preview-badge" class="res-badge" aria-hidden="true" hidden></div>
+            <div id="preview-ph" class="ph">Оберіть зображення в наборі<br>або завантажте зображення для розпізнавання</div>
+          </div>
+          <figcaption id="preview-name">—</figcaption>
+        </figure>
+
+        <figure class="view" data-num="23">
+          <div class="frame">
+            <canvas id="diff" width="512" height="512" role="img" aria-label="Різницеве зображення з’явиться після реалізації алгоритму"></canvas>
+            <div id="diff-ph" class="ph">Різниця з еталоном<br>з’явиться після обробки</div>
+          </div>
+          <figcaption>Різниця вибраного зображення та еталона</figcaption>
+        </figure>
+      </div>
+
+      <figure class="view wide" data-num="24">
+        <div class="frame">
+          <canvas id="hist" width="1040" height="400" role="img" aria-label="Кумулятивна гістограма яскравості різницевого зображення (з’явиться після реалізації алгоритму)"></canvas>
+          <div id="hist-ph" class="ph">Кумулятивна гістограма різницевого зображення<br>з’явиться після обробки</div>
+        </div>
+        <figcaption>Кумулятивна гістограма яскравості різницевого зображення</figcaption>
+      </figure>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
