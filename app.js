@@ -1,10 +1,9 @@
 'use strict';
 
 /* ------------------------------------------------------------------
- * Лаб. 1: інтерфейс користувача.
- * Алгоритм буде підключено в Лаб. 2 через об'єкт Lab2 (див. нижче).
+ * Інтерфейс користувача (Лаб. 1) та його зв'язок з алгоритмом (Лаб. 2, algorithm.js).
  * Ознака зображення: кумулятивна гістограма яскравості РІЗНИЦЕВОГО зображення
- * |еталон − зображення|; класифікатор — Brain.js. Інтерфейс змінювати не доведеться.
+ * |еталон − зображення|; класифікатор — Brain.js.
  * ------------------------------------------------------------------ */
 
 const $ = (id) => document.getElementById(id);
@@ -24,26 +23,7 @@ const state = {
   shownUrl: null,
 };
 
-/* ---------- Заглушка алгоритму (замінити в Лаб. 2) ---------- */
-const Lab2 = {
-  // Навчання: для кожного зразка береться різниця з еталоном, її кумулятивна гістограма (params.bins рівнів)
-  // подається на вхід мережі. Викликає onProgress(0..100). Зараз лише імітує прогрес.
-  train(samples, reference, params, onProgress) {
-    return new Promise((resolve) => {
-      let p = 0;
-      const t = setInterval(() => {
-        p = Math.min(100, p + 4);
-        onProgress(p);
-        if (p >= 100) { clearInterval(t); resolve(); }
-      }, 60);
-    });
-  },
-  // Розпізнавання зображення без мітки: має повернути
-  // { label: 'ok'|'defect', confidence: 0..1, histogram: number[], diff: ImageData }
-  async classify(image, reference, params) {
-    return null; // алгоритм ще не реалізовано
-  },
-};
+/* Алгоритм (різниця з еталоном, кумулятивна гістограма, Brain.js) — у algorithm.js, об'єкт Lab2. */
 
 /* ---------- Журнал і статус ---------- */
 function log(msg, isErr = false) {
@@ -77,6 +57,7 @@ function showResult(r) {
 function invalidateTraining(reason) {
   if (!state.trained) return;
   state.trained = false;
+  Lab2.reset();
   setProgress(0, `Потрібно навчити заново (${reason})`);
   clearResults();
 }
@@ -164,8 +145,8 @@ function attachGridKeys(ul, { select, remove }) {
 }
 
 /* ---------- Навчальний набір ---------- */
-function addSample(name, label, url) {
-  const s = { id: state.nextId++, name, label, url };
+function addSample(name, label, url, meta) {
+  const s = { id: state.nextId++, name, label, url, meta };
   state.samples.push(s);
   return s;
 }
@@ -207,34 +188,185 @@ function drawPreview(img) {
   $('preview').closest('.view').classList.add('filled');
 }
 
-function showImage(url, caption) {
+function showImage(url, caption, meta) {
   state.shownUrl = url;
+  state.shownMeta = meta || null;
   $('preview-name').textContent = caption;
   $('preview').setAttribute('aria-label', `Зображення: ${caption}`);
+  $('info-toggle').disabled = false;
+  updateInfoPanel();
+  $('save-preview-btn').disabled = false;
   const cached = imgCache.get(url);
-  if (cached) { drawPreview(cached); return; }
+  if (cached) { drawPreview(cached); updateInfoPanel(); return; }
   const img = new Image();
-  img.onload = () => { imgCache.set(url, img); if (state.shownUrl === url) drawPreview(img); };
+  img.onload = () => { imgCache.set(url, img); if (state.shownUrl === url) { drawPreview(img); updateInfoPanel(); } };
   img.src = url;
+}
+
+/* Інформація про поточне зображення: формат, розмір файлу, роздільна здатність (методичка, п.5) */
+function fileMeta(url, meta) {
+  const m = /^data:([^;]+);base64,(.*)$/.exec(url);
+  if (m) return { type: m[1], size: Math.round((m[2].length * 3) / 4) };
+  return meta || { type: '', size: null };
+}
+const EXT_NAME = { 'image/png': 'PNG', 'image/jpeg': 'JPG', 'image/bmp': 'BMP' };
+
+function updateInfoPanel() {
+  const panel = $('info-panel');
+  if (!state.shownUrl) { panel.hidden = true; return; }
+  const { type, size } = fileMeta(state.shownUrl, state.shownMeta);
+  const img = imgCache.get(state.shownUrl);
+  const rows = [
+    ['Розширення', EXT_NAME[type] || type || 'невідомо'],
+    ['Розмір файлу', size != null ? `${(size / 1024).toFixed(1)} КБ` : '—'],
+    ['Роздільна здатність', img ? `${img.width} × ${img.height} px` : 'завантажується…'],
+  ];
+  panel.innerHTML = `<dl>${rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')}</dl>`;
+}
+
+$('info-toggle').addEventListener('click', () => {
+  const panel = $('info-panel'), open = panel.hidden;
+  panel.hidden = !open;
+  $('info-toggle').setAttribute('aria-expanded', String(open));
+});
+
+/* ---------- Збереження зображення (png/jpg/bmp — методичка, "Що аплікація має містити", п.2) ---------- */
+
+// Canvas.toDataURL не підтримує image/bmp в жодному браузері, тому для BMP кодуємо вручну:
+// 24-біт, без стиснення, рядки знизу вгору й вирівняні на 4 байти (стандартний формат BMP).
+function canvasToBMPBlob(canvas) {
+  const w = canvas.width, h = canvas.height;
+  const { data } = canvas.getContext('2d').getImageData(0, 0, w, h);
+  const rowSize = Math.ceil((w * 3) / 4) * 4, pixelDataSize = rowSize * h, fileSize = 54 + pixelDataSize;
+  const view = new DataView(new ArrayBuffer(fileSize));
+  view.setUint8(0, 0x42); view.setUint8(1, 0x4D);               // 'BM'
+  view.setUint32(2, fileSize, true);
+  view.setUint32(10, 54, true);                                  // зсув до пікселів
+  view.setUint32(14, 40, true);                                  // розмір BITMAPINFOHEADER
+  view.setInt32(18, w, true); view.setInt32(22, h, true);
+  view.setUint16(26, 1, true); view.setUint16(28, 24, true);     // 1 площина, 24 біт/піксель
+  view.setUint32(34, pixelDataSize, true);
+  let p = 54;
+  for (let y = h - 1; y >= 0; y--) {
+    for (let x = 0; x < w; x++) {
+      const i = (y * w + x) * 4;
+      view.setUint8(p++, data[i + 2]); view.setUint8(p++, data[i + 1]); view.setUint8(p++, data[i]);   // BGR
+    }
+    p += rowSize - w * 3;   // вирівнювання рядка
+  }
+  return new Blob([view.buffer], { type: 'image/bmp' });
+}
+
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob), a = document.createElement('a');
+  a.href = url; a.download = filename; a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function saveCanvas(canvas, format, baseName) {
+  if (format === 'bmp') { downloadBlob(canvasToBMPBlob(canvas), `${baseName}.bmp`); return; }
+  let src = canvas;
+  if (format === 'jpg') {   // JPEG не має прозорості — підкладаємо білий фон, інакше вийде чорним
+    src = document.createElement('canvas');
+    src.width = canvas.width; src.height = canvas.height;
+    const ctx = src.getContext('2d');
+    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, src.width, src.height); ctx.drawImage(canvas, 0, 0);
+  }
+  const a = document.createElement('a');
+  a.href = src.toDataURL(format === 'jpg' ? 'image/jpeg' : 'image/png', 0.92);
+  a.download = `${baseName}.${format}`;
+  a.click();
+}
+
+for (const [canvasId, fmtId, btnId, base] of [
+  ['preview', 'save-preview-fmt', 'save-preview-btn', 'зображення'],
+  ['diff', 'save-diff-fmt', 'save-diff-btn', 'різниця'],
+  ['hist', 'save-hist-fmt', 'save-hist-btn', 'гістограма'],
+]) {
+  $(btnId).addEventListener('click', () => {
+    saveCanvas($(canvasId), $(fmtId).value, base);
+    log(`Збережено «${base}» у форматі ${$(fmtId).value.toUpperCase()}`);
+  });
 }
 
 function select(id) {
   if (state.selectedId === id) return;
   state.selectedId = id; state.testSel = null;
   const s = state.samples.find((x) => x.id === id);
-  showImage(s.url, `${s.name} · навчальне, ${CLASS_NAME[s.label]}`);
-  showResult(null); clearHist();
+  showImage(s.url, `${s.name} · навчальне, ${CLASS_NAME[s.label]}`, s.meta);
+  showResult(null); clearHist(); showFeatures(s.url);
   renderDataset(); renderTests();
 }
 
 function clearPreview() {
   state.shownUrl = null;
+  state.shownMeta = null;
   const c = $('preview');
   c.getContext('2d').clearRect(0, 0, c.width, c.height);
   $('preview').closest('.view').classList.remove('filled');
   $('preview-name').textContent = '—';
   $('preview').setAttribute('aria-label', 'Зображення не вибрано');
+  $('info-toggle').disabled = true;
+  $('info-panel').hidden = true;
+  $('info-toggle').setAttribute('aria-expanded', 'false');
+  $('save-preview-btn').disabled = true;
   clearHist();
+}
+
+/* Різницеве зображення та кумулятивна гістограма вибраного зображення */
+function drawDiff(imageData) {
+  const tmp = document.createElement('canvas');
+  tmp.width = imageData.width; tmp.height = imageData.height;
+  tmp.getContext('2d').putImageData(imageData, 0, 0);
+  const c = $('diff'), ctx = c.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(tmp, 0, 0, c.width, c.height);
+  c.closest('.view').classList.add('filled');
+  c.setAttribute('aria-label', 'Різницеве зображення: світлі пікселі відрізняються від еталона');
+  $('save-diff-btn').disabled = false;
+}
+
+function drawHist(h) {
+  const c = $('hist'), ctx = c.getContext('2d'), css = getComputedStyle(document.documentElement);
+  const W = c.width, H = c.height, L = 96, R = 24, T = 24, B = 56, w = W - L - R, hgt = H - T - B;
+  ctx.clearRect(0, 0, W, H);
+  ctx.font = '15px system-ui, sans-serif';
+  const last = h[h.length - 1] * 100;
+  // верхня межа осі — «кругле» число, щоб криві різних зображень легко порівнювати на око
+  const nice = [0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 50, 100].find((v) => v >= last) || 100, top = Math.max(nice, 0.1);
+  ctx.strokeStyle = css.getPropertyValue('--line'); ctx.fillStyle = css.getPropertyValue('--muted'); ctx.lineWidth = 1;
+  ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+  for (let k = 0; k <= 4; k++) {
+    const y = T + hgt - (hgt * k) / 4;
+    ctx.beginPath(); ctx.moveTo(L, y); ctx.lineTo(W - R, y); ctx.stroke();
+    ctx.fillText(`${+(top * k / 4).toPrecision(2)}%`, L - 8, y);
+  }
+  ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+  for (let k = 0; k <= 4; k++) ctx.fillText(String(Math.round(255 * k / 4)), L + (w * k) / 4, T + hgt + 8);
+  ctx.fillText('яскравість різниці (0–255)', L + w / 2, T + hgt + 30);
+  ctx.save(); ctx.translate(18, T + hgt / 2); ctx.rotate(-Math.PI / 2); ctx.textBaseline = 'middle';
+  ctx.fillText('частка пікселів, накопичена', 0, 0); ctx.restore();
+
+  const n = h.length, x = (i) => L + (n === 1 ? 0 : (w * i) / (n - 1)), y = (v) => T + hgt - (hgt * v * 100) / top;
+  ctx.strokeStyle = last > 0 ? css.getPropertyValue('--bad') : css.getPropertyValue('--ok'); ctx.lineWidth = 3;
+  ctx.beginPath();
+  h.forEach((v, i) => (i ? ctx.lineTo(x(i), y(v)) : ctx.moveTo(x(i), y(v))));
+  ctx.stroke();
+  c.closest('.view').classList.add('filled');
+  c.setAttribute('aria-label', last > 0
+    ? `Кумулятивна гістограма: змінено ${last.toFixed(2)}% пікселів`
+    : 'Кумулятивна гістограма: усі значення нульові, різниці з еталоном немає');
+  $('save-hist-btn').disabled = false;
+}
+
+function drawFeatures(f) { drawDiff(f.diff); drawHist(f.histogram); }
+
+/* Ознаки навчального зображення показуємо одразу при виборі; для зображень без мітки — лише після розпізнавання */
+async function showFeatures(url) {
+  if (!state.reference) return;
+  const bins = Number($('bins').value);
+  const f = await Lab2.inspect(url, state.reference.url, Number.isInteger(bins) && bins >= 4 && bins <= 256 ? bins : 256).catch(() => null);
+  if (f && state.shownUrl === url) drawFeatures(f);
 }
 
 function clearHist() {   // ознаки (різниця та гістограма) належать вибраному зображенню
@@ -243,12 +375,14 @@ function clearHist() {   // ознаки (різниця та гістограм
     c.getContext('2d').clearRect(0, 0, c.width, c.height);
     c.closest('.view').classList.remove('filled');
   }
+  $('save-diff-btn').disabled = true;
+  $('save-hist-btn').disabled = true;
 }
 
 /* ---------- Зображення для розпізнавання (без мітки) ---------- */
-function addTest(name, url, truth) {
+function addTest(name, url, truth, meta) {
   // truth — справжній клас (відомий лише для згенерованих зображень), потрібен для перевірки результату в Лаб. 2
-  const t = { id: state.nextId++, name, url, truth, result: null };
+  const t = { id: state.nextId++, name, url, truth, result: null, meta };
   state.tests.push(t);
   return t;
 }
@@ -257,8 +391,9 @@ function selectTest(id) {
   if (state.testSel === id) return;   // повторний клік не перемальовує зображення
   state.testSel = id; state.selectedId = null;
   const t = state.tests.find((x) => x.id === id);
-  showImage(t.url, `${t.name} · для розпізнавання (мітки немає)`);
+  showImage(t.url, `${t.name} · для розпізнавання (мітки немає)`, t.meta);
   showResult(t.result); clearHist();
+  if (t.result && t.result.feat) drawFeatures(t.result.feat);
   renderDataset(); renderTests();
 }
 
@@ -339,7 +474,7 @@ function handleFiles(fileList) {
   const { ok, errors } = checkFiles(fileList);
   showDropError('err-train-drop', errors);
   if (!ok.length) return;
-  ok.forEach((f) => addSample(f.name, label, URL.createObjectURL(f)));
+  ok.forEach((f) => addSample(f.name, label, URL.createObjectURL(f), { size: f.size, type: f.type }));
   invalidateTraining('набір даних змінено');
   log(`Завантажено ${ok.length} файл(ів) як «${CLASS_NAME[label]}»`);
   renderDataset();
@@ -350,7 +485,7 @@ function handleTestFiles(fileList) {
   const { ok, errors } = checkFiles(fileList);
   showDropError('err-test-drop', errors);
   if (!ok.length) return;
-  const added = ok.map((f) => addTest(f.name, URL.createObjectURL(f), null));
+  const added = ok.map((f) => addTest(f.name, URL.createObjectURL(f), null, { size: f.size, type: f.type }));
   log(`Додано для розпізнавання: ${added.length} файл(ів)`);
   renderTests();
   selectTest(added[0].id);
@@ -376,6 +511,72 @@ function updateDropCls() {
 }
 document.querySelectorAll('input[name=cls]').forEach((r) => r.addEventListener('change', updateDropCls));
 
+/* ---------- Завантаження цілої папки: групування за підпапками (якість) та розширенням ---------- */
+// webkitRelativePath кожного файлу має вигляд "коренева_папка/підпапка/.../файл.ext"
+let folderFiles = [];   // { file, topSub, ext }
+
+function extOf(name) { const m = /\.([^.]+)$/.exec(name); return m ? m[1].toLowerCase() : '?'; }
+
+$('btn-folder-pick').addEventListener('click', () => $('folder-input').click());
+
+$('folder-input').addEventListener('change', () => {
+  const files = [...$('folder-input').files];
+  $('folder-input').value = '';
+  if (!files.length) return;
+  const root = files[0].webkitRelativePath.split('/')[0];
+  folderFiles = files.map((f) => {
+    const parts = f.webkitRelativePath.split('/');
+    return { file: f, topSub: parts.length > 2 ? parts[1] : null, ext: extOf(f.name) };
+  });
+
+  const bySub = new Map();   // підпапка → кількість (для списку областей вибору)
+  for (const x of folderFiles) { const k = x.topSub || ''; bySub.set(k, (bySub.get(k) || 0) + 1); }
+
+  const sel = $('folder-scope');
+  sel.innerHTML = '';
+  const optAll = document.createElement('option');
+  optAll.value = ''; optAll.textContent = `Уся папка «${root}» (${folderFiles.length})`;
+  sel.append(optAll);
+  for (const [sub, n] of bySub) {
+    if (!sub) continue;   // файли прямо в корені вже враховані в "Уся папка"
+    const o = document.createElement('option');
+    o.value = sub; o.textContent = `${sub} (${n})`;
+    sel.append(o);
+  }
+  $('folder-panel').hidden = false;
+  updateFolderBreakdown();
+  log(`Обрано папку «${root}»: ${folderFiles.length} файл(ів)${bySub.size > 1 ? `, підпапок: ${bySub.size - (bySub.has('') ? 1 : 0)}` : ''}`);
+});
+
+function filesInScope() {
+  const scope = $('folder-scope').value;
+  return scope ? folderFiles.filter((x) => x.topSub === scope) : folderFiles;
+}
+
+// розбивка за розширенням для обраної області — саме це вимагає методичка ("погруповані за розширенням та якістю")
+function updateFolderBreakdown() {
+  const byExt = new Map();
+  for (const x of filesInScope()) byExt.set(x.ext, (byExt.get(x.ext) || 0) + 1);
+  $('folder-breakdown').textContent = byExt.size
+    ? `За розширенням: ${[...byExt].map(([ext, n]) => `${ext.toUpperCase()} — ${n}`).join(', ')}`
+    : 'У цій області файлів немає';
+}
+$('folder-scope').addEventListener('change', updateFolderBreakdown);
+
+$('btn-folder-add').addEventListener('click', () => {
+  if (state.busy) return;
+  const label = document.querySelector('input[name=cls]:checked').value;
+  const scopeFiles = filesInScope().map((x) => x.file);
+  const { ok, errors } = checkFiles(scopeFiles);
+  showDropError('err-train-drop', errors);
+  if (!ok.length) return;
+  ok.forEach((f) => addSample(f.name, label, URL.createObjectURL(f), { size: f.size, type: f.type }));
+  invalidateTraining('набір даних змінено');
+  const scopeName = $('folder-scope').selectedOptions[0].textContent;
+  log(`Додано з «${scopeName}»: ${ok.length} файл(ів) як «${CLASS_NAME[label]}»`);
+  renderDataset();
+});
+
 /* ---------- Генератор зображень ---------- */
 function drawShape(ctx, shape, cx, cy, r) {
   ctx.beginPath();
@@ -384,7 +585,20 @@ function drawShape(ctx, shape, cx, cy, r) {
   ctx.fill();
 }
 
-function generateImage(shape, defect) {
+// Кілька випадкових пікселів-«шуму» (сенсор/стиснення). Додається до обох класів однаково, тож
+// «норма» в тренувальних даних більше не рівно 0 — мережа має на чому побудувати запас від дефекту,
+// а не ставити межу впритул до нуля (див. обговорення різниці еталон/навчальний набір).
+function addNoise(ctx, S, count) {
+  const data = ctx.getImageData(0, 0, S, S);
+  for (let i = 0; i < count; i++) {
+    const p = (Math.floor(Math.random() * S * S)) * 4;
+    const v = data.data[p] === 0 ? 255 : 0;   // інвертуємо піксель незалежно від того, фігура це чи фон
+    data.data[p] = data.data[p + 1] = data.data[p + 2] = v;
+  }
+  ctx.putImageData(data, 0, 0);
+}
+
+function generateImage(shape, defect, noise = true) {
   const S = 256, c = document.createElement('canvas');   // 256×256: на екрані піксель ≈ піксель, край без «сходинок»
   c.width = c.height = S;
   const ctx = c.getContext('2d');
@@ -398,11 +612,21 @@ function generateImage(shape, defect) {
     // невелика «висяча» ділянка на межі фігури
     const n = 1 + Math.floor(Math.random() * 2);
     for (let i = 0; i < n; i++) {
-      const a = Math.random() * Math.PI * 2, d = shape === 'circle' ? r : r * 1.05;
-      const px = cx + Math.cos(a) * d, py = cy + Math.sin(a) * d, pr = 6 + Math.random() * 8;
+      // центр плями — строго на межі фігури, тож принаймні половина плями видима (інакше «дефект» міг
+      // цілком опинитись усередині квадрата й не змінити зображення)
+      let px, py;
+      if (shape === 'circle') {
+        const a = Math.random() * Math.PI * 2;
+        px = cx + Math.cos(a) * r; py = cy + Math.sin(a) * r;
+      } else {
+        const u = (Math.random() * 2 - 1) * r;
+        [px, py] = [[cx + u, cy - r], [cx + r, cy + u], [cx + u, cy + r], [cx - r, cy + u]][Math.floor(Math.random() * 4)];
+      }
+      const pr = 6 + Math.random() * 8;
       ctx.beginPath(); ctx.arc(px, py, pr, 0, Math.PI * 2); ctx.fill();
     }
   }
+  if (noise) addNoise(ctx, S, 15 + Math.floor(Math.random() * 15));   // 15–30 пікселів ≈ 0.02–0.045% — набагато менше за дефект
   return c.toDataURL('image/png');
 }
 
@@ -424,7 +648,7 @@ function setReference(name, url, shape) {
 }
 
 function generateReference(shape, auto) {
-  setReference(`еталон_${SHAPE_NAME[shape]}`, generateImage(shape, false), shape);
+  setReference(`еталон_${SHAPE_NAME[shape]}`, generateImage(shape, false, false), shape);
   log(`${auto ? 'Еталон створено автоматично' : 'Згенеровано еталон'}: ${SHAPE_NAME[shape]}`);
 }
 
@@ -442,27 +666,40 @@ $('btn-gen-ref').addEventListener('click', () => { showDropError('err-ref', []);
 
 function validateCount(report) {
   const raw = $('count').value.trim(), n = Number(raw);
-  const bad = raw === '' || !Number.isInteger(n) || n < 1 || n > 50;
+  const bad = raw === '' || !Number.isInteger(n) || n < 1 || n > 1000;
   $('count').setAttribute('aria-invalid', bad ? 'true' : 'false');
-  $('count-err').textContent = bad ? 'Введіть ціле число від 1 до 50' : '';
-  if (bad && report) { log('Кількість прикладів має бути цілим числом від 1 до 50', true); $('count').focus(); }
+  $('count-err').textContent = bad ? 'Введіть ціле число від 1 до 1000' : '';
+  if (bad && report) { log('Кількість прикладів має бути цілим числом від 1 до 1000', true); $('count').focus(); }
   return bad ? null : n;
 }
 $('count').addEventListener('input', () => validateCount(false));
 
-$('btn-generate').addEventListener('click', () => {
+const GEN_CHUNK = 20;   // після кожних N фігур віддаємо кадр, щоб прогрес-бар і UI не завмирали при великих count
+
+$('btn-generate').addEventListener('click', async () => {
   const n = validateCount(true), shape = $('shape').value;
   if (n === null) return;
   const name = SHAPE_NAME[shape];
+  setBusy(true);
+  setProgress(0, 'Генерація…');
+  const t0 = performance.now();
   // навчальні зображення порівнюються з еталоном тієї самої фігури; власний (завантажений) еталон не чіпаємо
   if (!state.reference || (state.reference.shape && state.reference.shape !== shape)) generateReference(shape, true);
   for (let i = 0; i < n; i++) {
     addSample(`${name}_норма_${i + 1}`, 'ok', generateImage(shape, false));
     addSample(`${name}_дефект_${i + 1}`, 'defect', generateImage(shape, true));
+    if (i % GEN_CHUNK === GEN_CHUNK - 1 || i === n - 1) {
+      const p = Math.round((100 * (i + 1)) / n);
+      setProgress(p, `Генерація… ${p}%`);
+      await new Promise((r) => setTimeout(r, 0));   // віддаємо кадр: перемальовка + реакція на клік "скасувати" тощо
+    }
   }
+  const seconds = (performance.now() - t0) / 1000;
   invalidateTraining('набір даних змінено');
-  log(`Згенеровано ${n * 2} зображень (${name}): ${n} без дефекту, ${n} з дефектом`);
+  log(`Згенеровано ${n * 2} зображень (${name}): ${n} без дефекту, ${n} з дефектом за ${seconds.toFixed(2)} с`);
+  setProgress(100, `Генерація завершена за ${seconds.toFixed(2)} с`);
   renderDataset();
+  setBusy(false);
 });
 
 let testCounter = 0;
@@ -478,7 +715,7 @@ $('btn-clear').addEventListener('click', () => {
   if (!confirm('Видалити всі зображення з навчального набору?')) return;
   const wasShown = state.selectedId !== null;
   state.samples.forEach((s) => revoke(s.url));
-  state.samples = []; state.selectedId = null; state.trained = false;
+  state.samples = []; state.selectedId = null; state.trained = false; Lab2.reset();
   clearResults();
   if (wasShown) { clearPreview(); showResult(null); }
   setProgress(0, 'Очікування');
@@ -516,32 +753,47 @@ function setBusy(b) {
 }
 
 /* ---------- Навчання та розпізнавання ---------- */
-$('btn-train').addEventListener('click', async () => {
+const pct = (m) => (m ? `${(m.accuracy * 100).toFixed(0)}% (${m.tp + m.tn}/${m.n})` : '—');
+
+async function trainNetwork() {
   const params = validateParams(true);
   if (!params) return;
   setBusy(true);
   setProgress(0, 'Навчання…');
   log(`Старт навчання: ${state.samples.length} зображень, еталон «${state.reference.name}», параметри ${JSON.stringify(params)}`);
-  await Lab2.train(state.samples, state.reference, params, (p) => setProgress(p, `Навчання… ${p}%`));
-  setProgress(100, 'Навчання завершено');
-  state.trained = true;
-  log('Навчання завершено (Лаб. 1: імітація, алгоритм буде в Лаб. 2)');
+  try {
+    const r = await Lab2.train(state.samples, state.reference, params, (p) => setProgress(p, `Навчання… ${p}%`));
+    setProgress(100, 'Навчання завершено');
+    state.trained = true;
+    log(`Ознаки обчислено за ${r.extract.seconds.toFixed(2)} с (${r.extract.inPool ? `пул із ${r.extract.workers} Worker'ів` : 'послідовно в головному потоці'})`);
+    log(`Навчання завершено за ${r.seconds.toFixed(2)} с (${r.iterations} епох, похибка ${r.error.toFixed(4)}, ${r.inWorker ? 'Web Worker' : 'головний потік'})`);
+    log(`Точність: навчальна ${pct(r.train)}, валідаційна ${pct(r.val)}${r.val ? `; TP=${r.val.tp} FP=${r.val.fp} TN=${r.val.tn} FN=${r.val.fn}` : ' (мало прикладів для валідації)'}`);
+  } catch (e) {
+    state.trained = false;
+    setProgress(0, 'Помилка навчання');
+    log(`Помилка навчання: ${e.message}`, true);
+  }
   setBusy(false);
   $('btn-train').focus();   // кнопка на час навчання блокується, тож повертаємо фокус, щоб він не «загубився»
-});
+}
+$('btn-train').addEventListener('click', trainNetwork);
 
 $('btn-classify').addEventListener('click', async () => {
   const t = state.tests.find((x) => x.id === state.testSel);
   if (!t) return;
-  const params = validateParams(true);
-  if (!params) return;
-  const res = await Lab2.classify(t, state.reference, params);   // зображення в області перегляду не перемальовується
+  let res;
+  try { res = await Lab2.classify(t, state.reference); }
+  catch (e) { log(`Помилка розпізнавання «${t.name}»: ${e.message}`, true); return; }
   if (!res) {
-    t.result = { kind: '', text: 'Алгоритм розпізнавання буде підключено в Лаб. 2' };
-    log(`Розпізнавання «${t.name}»: алгоритм ще не підключено`);
+    t.result = { kind: '', text: 'Мережу ще не навчено' };
+    log(`Розпізнавання «${t.name}»: мережу ще не навчено`);
   } else {
-    const name = res.label === 'ok' ? 'Без дефекту' : 'Є дефект', pct = (res.confidence * 100).toFixed(0);
-    t.result = { kind: res.label, text: `${name} (впевненість ${pct}%)`, short: `${name} · ${pct}%` };
+    const name = res.label === 'ok' ? 'Без дефекту' : 'Є дефект', p = (res.confidence * 100).toFixed(0);
+    // для згенерованих зображень справжній клас відомий — показуємо, чи мережа помилилась
+    const check = t.truth ? (t.truth === res.label ? ' — вірно' : ` — ПОМИЛКА (насправді ${CLASS_NAME[t.truth]})`) : '';
+    t.result = { kind: res.label, text: `${name} (впевненість ${p}%)${check}`, short: `${name} · ${p}%`, feat: { diff: res.diff, histogram: res.histogram } };
+    log(`Розпізнавання «${t.name}»: ${name}, ${p}%${check}`);
+    if (state.testSel === t.id) drawFeatures(t.result.feat);
   }
   showResult(t.result);
   renderTests();
@@ -565,7 +817,5 @@ if (location.search.includes('demo')) {
   $('btn-generate').click();
   for (let k = 0; k < 4; k++) $('btn-gen-test').click();
   selectTest(state.tests[1].id);
-  state.trained = true;
-  setProgress(100, 'Навчання завершено');
-  updateButtons();
+  trainNetwork().then(() => { if (state.trained) $('btn-classify').click(); });
 }

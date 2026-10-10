@@ -5,8 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Розпізнавання дефектів фігур</title>
   <link rel="stylesheet" href="style.css">
-  <!-- Brain.js буде використано в Лаб. 2 для навчання мережі -->
-  <!-- <script src="https://cdn.jsdelivr.net/npm/brain.js"></script> -->
 </head>
 <body>
   <header class="topbar">
@@ -49,6 +47,17 @@
           </label>
           <div id="err-train-drop" class="field-err" aria-live="polite"></div>
 
+          <div class="folder-add" data-num="29">
+            <input id="folder-input" type="file" webkitdirectory multiple hidden>
+            <button id="btn-folder-pick" class="btn link" type="button">Або обрати папку (з підпапками за якістю/типом)…</button>
+          </div>
+          <div id="folder-panel" class="folder-panel" data-num="30" hidden>
+            <label for="folder-scope" class="sr-only">Яку частину папки додати до навчального набору</label>
+            <select id="folder-scope" aria-label="Яку частину папки додати"></select>
+            <button id="btn-folder-add" class="btn" type="button">Додати до набору</button>
+            <p id="folder-breakdown" class="folder-breakdown"></p>
+          </div>
+
           <fieldset class="field" data-num="4">
             <legend>Клас завантажуваних зображень</legend>
             <div class="segmented">
@@ -69,7 +78,7 @@
               </div>
               <div class="field" data-num="6">
                 <label for="count">Кількість кожного класу</label>
-                <input id="count" type="number" min="1" max="50" value="10" aria-describedby="count-err">
+                <input id="count" type="number" min="1" max="1000" value="150" aria-describedby="count-err">
                 <small id="count-err" class="field-err" aria-live="polite"></small>
               </div>
             </div>
@@ -101,7 +110,7 @@
             </div>
             <div class="field" data-num="13">
               <label for="lr">Швидкість навчання</label>
-              <input id="lr" type="number" min="0.001" max="1" step="0.001" value="0.01" aria-describedby="params-err">
+              <input id="lr" type="number" min="0.001" max="1" step="0.001" value="0.1" aria-describedby="params-err">
             </div>
           </div>
           <div id="params-err" class="field-err" aria-live="polite"></div>
@@ -149,7 +158,20 @@
             <div id="preview-badge" class="res-badge" aria-hidden="true" hidden></div>
             <div id="preview-ph" class="ph">Оберіть зображення в наборі<br>або завантажте зображення для розпізнавання</div>
           </div>
-          <figcaption id="preview-name">—</figcaption>
+          <figcaption>
+            <span id="preview-name">—</span>
+            <button id="info-toggle" class="info-btn" type="button" data-num="25" aria-expanded="false" aria-controls="info-panel" title="Інформація про файл" disabled>ℹ</button>
+          </figcaption>
+          <div id="info-panel" class="info-panel" hidden></div>
+          <div class="save-row" data-num="26">
+            <label for="save-preview-fmt" class="sr-only">Формат збереження зображення</label>
+            <select id="save-preview-fmt" aria-label="Формат файлу">
+              <option value="png">PNG</option>
+              <option value="jpg">JPG</option>
+              <option value="bmp">BMP</option>
+            </select>
+            <button id="save-preview-btn" class="btn link" type="button" disabled>Зберегти зображення</button>
+          </div>
         </figure>
 
         <figure class="view" data-num="23">
@@ -158,6 +180,15 @@
             <div id="diff-ph" class="ph">Різниця з еталоном<br>з’явиться після обробки</div>
           </div>
           <figcaption>Різниця вибраного зображення та еталона</figcaption>
+          <div class="save-row" data-num="27">
+            <label for="save-diff-fmt" class="sr-only">Формат збереження різницевого зображення</label>
+            <select id="save-diff-fmt" aria-label="Формат файлу">
+              <option value="png">PNG</option>
+              <option value="jpg">JPG</option>
+              <option value="bmp">BMP</option>
+            </select>
+            <button id="save-diff-btn" class="btn link" type="button" disabled>Зберегти різницю</button>
+          </div>
         </figure>
       </div>
 
@@ -167,10 +198,21 @@
           <div id="hist-ph" class="ph">Кумулятивна гістограма різницевого зображення<br>з’явиться після обробки</div>
         </div>
         <figcaption>Кумулятивна гістограма яскравості різницевого зображення</figcaption>
+        <div class="save-row" data-num="28">
+          <label for="save-hist-fmt" class="sr-only">Формат збереження гістограми</label>
+          <select id="save-hist-fmt" aria-label="Формат файлу">
+            <option value="png">PNG</option>
+            <option value="jpg">JPG</option>
+            <option value="bmp">BMP</option>
+          </select>
+          <button id="save-hist-btn" class="btn link" type="button" disabled>Зберегти гістограму</button>
+        </div>
       </figure>
     </section>
   </main>
 
+  <script src="lib/brain.min.js"></script>
+  <script src="algorithm.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

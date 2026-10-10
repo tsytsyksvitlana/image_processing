@@ -255,6 +255,36 @@ input[aria-invalid="true"] { border-color: var(--bad); }
 .view.filled .ph { display: none; }
 .view figcaption { color: var(--muted); font-size: 12px; margin-top: 6px; }
 
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+}
+.info-btn {
+  position: relative; display: inline-grid; place-items: center; width: 18px; height: 18px; margin-left: 6px;
+  border: 1px solid var(--muted); border-radius: 50%; background: none; color: var(--muted);
+  font-size: 11px; line-height: 1; cursor: pointer; vertical-align: middle;
+}
+.info-btn:hover:not(:disabled), .info-btn[aria-expanded="true"] { border-color: var(--accent); color: var(--accent); }
+.info-btn:disabled { opacity: .4; cursor: not-allowed; }
+.info-panel {
+  margin-top: 4px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px;
+  background: var(--accent-soft); font-size: 12px; color: #333; text-align: left;
+}
+.info-panel dl { display: grid; grid-template-columns: auto 1fr; gap: 2px 8px; margin: 0; }
+.info-panel dt { color: var(--muted); }
+.info-panel dd { margin: 0; }
+.save-row { position: relative; display: flex; gap: 6px; justify-content: center; margin-top: 6px; }
+.save-row select { border: 1px solid var(--line); border-radius: 6px; font-size: 12px; padding: 3px 6px; }
+.save-row .btn { font-size: 12px; padding: 3px 10px; }
+
+.folder-add { position: relative; margin: 8px 0; }
+.folder-panel {
+  position: relative; margin: 0 0 10px; padding: 8px 10px; border: 1px dashed var(--line); border-radius: 8px;
+  display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+}
+.folder-panel select { border: 1px solid var(--line); border-radius: 6px; padding: 4px 6px; font-size: 13px; flex: 1; min-width: 140px; }
+.folder-breakdown { flex-basis: 100%; margin: 0; font-size: 12px; color: var(--muted); }
+
 /* результат на зображенні та на мініатюрі */
 .res-badge {
   position: absolute; top: 10px; left: 10px; z-index: 2; padding: 5px 12px; border-radius: 16px;
