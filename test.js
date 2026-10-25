@@ -11,7 +11,7 @@ assert.deepStrictEqual([...C.toGray(new Uint8Array([255, 255, 255, 255, 0, 0, 0,
 // 2. різниця
 assert.deepStrictEqual([...C.differenceImage(Uint8Array.of(0, 255, 100), Uint8Array.of(10, 255, 40))], [10, 0, 60]);
 
-// 3. кумулятивна гістограма: без різниці — суцільні нулі; інакше монотонна і закінчується часткою змінених пікселів
+// 3. кумулятивна гістограма: без різниці – суцільні нулі; інакше монотонна і закінчується часткою змінених пікселів
 const zero = C.cumulativeHistogram(new Uint8Array(100), 16);
 assert.ok(zero.every((v) => v === 0), 'clean image → all zeros');
 const d = new Uint8Array(100); d[0] = 255; d[1] = 255; d[2] = 10;

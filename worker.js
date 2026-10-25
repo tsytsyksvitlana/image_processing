@@ -1,7 +1,7 @@
 'use strict';
 
 /* Web Worker: навчання мережі поза головним потоком, щоб інтерфейс не «зависав».
- * Отримує { data, params } — уже підготовлені навчальні пари; повертає JSON мережі. */
+ * Отримує { data, params } – уже підготовлені навчальні пари; повертає JSON мережі. */
 importScripts('lib/brain.min.js', 'algorithm.js');
 
 self.onmessage = (e) => {

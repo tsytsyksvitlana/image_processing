@@ -12,7 +12,7 @@
 (function (root) {
   const SIZE = 256;          // усі зображення зводяться до SIZE×SIZE: ознака має бути порівнянною
   const VAL_SHARE = 0.2;     // частка валідаційної вибірки
-  const MIN_PER_CLASS = 5;   // менше — валідаційної вибірки не робимо (лишалось би 1 зображення)
+  const MIN_PER_CLASS = 5;   // менше – валідаційної вибірки не робимо (лишалось би 1 зображення)
 
   /* ---------- 1. Чисті функції: ознаки ---------- */
 
@@ -30,7 +30,7 @@
     return d;
   }
 
-  // Кумулятивна гістограма різницевого зображення: h[i] — частка пікселів, чия різниця ненульова
+  // Кумулятивна гістограма різницевого зображення: h[i] – частка пікселів, чия різниця ненульова
   // і не перевищує верхню межу інтервалу i (рівні 0..255 поділені на `bins` рівних інтервалів).
   // Нульова різниця не враховується: для зображення без дефекту всі значення дорівнюють 0
   // (саме так у статті), а для дефектного крива зростає до частки змінених пікселів.
@@ -75,7 +75,7 @@
     return { train, val };
   }
 
-  // Метрики за формулою зі статті; «позитивний» клас — дефект
+  // Метрики за формулою зі статті; «позитивний» клас – дефект
   function confusion(pred, truth) {
     let tp = 0, fp = 0, tn = 0, fn = 0;
     for (let i = 0; i < pred.length; i++) {
@@ -95,7 +95,7 @@
 
   /* ---------- 3. Навчання (виконується у Web Worker або, як запасний варіант, у сторінці) ---------- */
 
-  // data: [{ input: number[], output: {ok|defect: 1} }]. hidden = 0 — одношарова мережа (як у статті).
+  // data: [{ input: number[], output: {ok|defect: 1} }]. hidden = 0 – одношарова мережа (як у статті).
   function trainNetwork(data, params, onProgress) {
     const net = new root.brain.NeuralNetwork({ hiddenLayers: params.hidden > 0 ? [params.hidden] : [] });
     const stats = net.train(data, {
@@ -140,7 +140,7 @@
       return out;
     }
 
-    // Запускає навчання у Worker; якщо Worker недоступний (наприклад, відкрито через file://) — у сторінці.
+    // Запускає навчання у Worker; якщо Worker недоступний (наприклад, відкрито через file://) – у сторінці.
     function runTraining(data, params, onProgress) {
       return new Promise((resolve, reject) => {
         let worker;
@@ -161,9 +161,9 @@
     }
 
     // Обчислює ознаки (різниця+гістограма) для всіх samples. На відміну від самого навчання (яке
-    // послідовне по епохах), кожне зображення тут повністю незалежне від інших — тому це
+    // послідовне по епохах), кожне зображення тут повністю незалежне від інших – тому це
     // "embarrassingly parallel" задача: розподіляємо її між кількома Worker'ами (feature-worker.js).
-    // Якщо Worker/OffscreenCanvas недоступні — падаємо назад на послідовний прохід у сторінці.
+    // Якщо Worker/OffscreenCanvas недоступні – падаємо назад на послідовний прохід у сторінці.
     function extractFeaturesParallel(samples, referenceUrl, bins, onProgress) {
       const poolSize = Math.max(1, Math.min(navigator.hardwareConcurrency || 4, 8, samples.length));
       let workers;
@@ -224,7 +224,7 @@
         return { diff: diffToImageData(diff), histogram: cumulativeHistogram(diff, bins) };
       },
 
-      // Навчання: samples — [{ url, label }]. Повертає метрики; onProgress(0..100).
+      // Навчання: samples – [{ url, label }]. Повертає метрики; onProgress(0..100).
       async train(samples, reference, params, onProgress) {
         this.model = null;
         onProgress(0);
@@ -234,7 +234,7 @@
         this.lastExtract = { seconds: (performance.now() - t0f) / 1000, inPool, workers: poolSize };
         const { train, val } = splitDataset(items);
         // Не Math.max(1e-9, ...усі_значення): при великих вибірках (сотні зображень × bins) розкладання
-        // масиву в окремі аргументи функції перевищує ліміт стека виклику рушія — тому цикл, а не spread.
+        // масиву в окремі аргументи функції перевищує ліміт стека виклику рушія – тому цикл, а не spread.
         let scale = 1e-9;
         for (const x of train) for (const v of x.hist) if (v > scale) scale = v;
         const data = train.map((x) => ({ input: scaleFeatures(x.hist, scale), output: { [x.label]: 1 } }));
@@ -254,7 +254,7 @@
         };
       },
 
-      // Розпізнавання: image — { url }. Повертає { label, confidence, histogram, diff } або null, якщо мережі ще немає.
+      // Розпізнавання: image – { url }. Повертає { label, confidence, histogram, diff } або null, якщо мережі ще немає.
       async classify(image, reference) {
         const m = this.model;
         if (!m) return null;

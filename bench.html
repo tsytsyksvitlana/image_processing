@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <title>Лаб 3 — бенчмарк продуктивності</title>
+  <style>
+    body { font: 14px/1.4 sans-serif; margin: 24px; color: #222; }
+    textarea { width: 100%; height: 140px; font: 12px monospace; }
+    table.bench-table { border-collapse: collapse; font-size: 12px; margin-top: 12px; }
+    table.bench-table th, table.bench-table td { border: 1px solid #ccc; padding: 4px 7px; text-align: right; }
+    table.bench-table th:first-child, table.bench-table td:first-child { text-align: left; }
+    #chart { border: 1px solid #ddd; margin-top: 12px; }
+    button { padding: 8px 16px; font-size: 14px; }
+    #status { margin-left: 10px; color: #666; }
+  </style>
+</head>
+<body>
+  <h1>Лаб 3 — бенчмарк: час обробки одного зображення vs роздільна здатність</h1>
+  <p>Вимірює <code>LabCore.toGray</code> + <code>differenceImage</code> + <code>cumulativeHistogram</code> з
+    <code>algorithm.js</code> (ті самі функції, що й Lab2.inspect у виробничому застосунку) на реальних фото
+    різної роздільної здатності — без штучного розтягування. <code>performance.now()</code>, 5 запусків на файл.</p>
+
+  <!-- Джерела тестових зображень: локальний HTTP-сервер поза репозиторієм (щоб не комітити фото в git). -->
+  <textarea id="sources" hidden>[
+    {"name":"small",  "url":"http://localhost:8001/small_480.jpg"},
+    {"name":"medium", "url":"http://localhost:8001/medium_720.jpg"},
+    {"name":"large",  "url":"http://localhost:8001/large_1080.jpg"},
+    {"name":"4K",     "url":"http://localhost:8001/xl_2160.jpg"},
+    {"name":"xxl",    "url":"http://localhost:8001/xxl_5000.jpg"},
+    {"name":"native", "url":"http://localhost:8001/native_full.jpg"}
+  ]</textarea>
+
+  <button id="btn-run">Запустити бенчмарк</button><span id="status"></span>
+
+  <div id="results"></div>
+  <canvas id="chart" width="640" height="320"></canvas>
+
+  <h3>Markdown-таблиця для звіту</h3>
+  <textarea id="markdown" readonly></textarea>
+
+  <script src="algorithm.js"></script>
+  <script src="bench.js"></script>
+</body>
+</html>
